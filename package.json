@@ -1,0 +1,22 @@
+{
+    "name": "sdkbar-iap",
+    "version": "0.0.1",
+    "description": "In-app purchases plugin for cocos2d-x",
+    "sdk-dependence": {
+        "sdkbar-utils": "^0.0.4"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DrMoriarty/sdkbar-iap"
+    },
+    "keywords": [
+        "cocos2d-x",
+        "plugin",
+        "iap",
+        "sdkbox",
+        "sdkbar",
+        "ecosystem:cocos2d-x"
+    ],
+    "author": "DrMoriarty",
+    "license": "MIT License"
+}
