@@ -344,13 +344,28 @@ void register_all_iap_framework(JSContext* cx, JS::HandleObject obj) {
     JS::RootedObject ns(cx);
     get_or_create_js_obj(cx, obj, "iap", &ns);
 
+    // initialize plugin, args: array of skus, callback func, this pointer
     JS_DefineFunction(cx, ns, "init", js_iap_init, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    
+    // get purchased items, args: callback func, this pointer
     JS_DefineFunction(cx, ns, "get_purchases", js_iap_get_purchases, 2, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    
+    // purchase an item, args: sku, payload, callback func, this pointer
     JS_DefineFunction(cx, ns, "buy", js_iap_buy, 4, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    
+    // subscribe, args: sku, payload, oldPurchasedSkus (array of strings), callback func, this pointer
     JS_DefineFunction(cx, ns, "subscribe", js_iap_subscribe, 5, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+
+    // consume purchased item, args: sku, callback func, this pointer
     JS_DefineFunction(cx, ns, "consume", js_iap_consume, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    
+    // return available products for purchasing, args: callback func, this pointer
     JS_DefineFunction(cx, ns, "available_products", js_iap_available_products, 2, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    
+    // return product details, args: sku, callback func, this pointer
     JS_DefineFunction(cx, ns, "product_details", js_iap_product_details, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+
+    // stub for restore purchasings (will be implemented for iOS)
     JS_DefineFunction(cx, ns, "restore", js_iap_restore, 0, JSPROP_PERMANENT | JSPROP_ENUMERATE);
 }
 
