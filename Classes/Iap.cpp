@@ -173,6 +173,7 @@ static bool js_iap_init(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -193,6 +194,7 @@ static bool js_iap_get_purchases(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -219,6 +221,7 @@ static bool js_iap_buy(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -248,6 +251,7 @@ static bool js_iap_subscribe(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -271,6 +275,7 @@ static bool js_iap_consume(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -291,6 +296,7 @@ static bool js_iap_available_products(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
@@ -314,10 +320,17 @@ static bool js_iap_product_details(JSContext *cx, uint32_t argc, jsval *vp)
         } else {
             rec.rval().set(JSVAL_FALSE);
         }
+        return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
         return false;
     }
+}
+
+static bool js_iap_restore(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("js_iap_restore");
+    return true;
 }
 
 ///////////////////////////////////////
@@ -338,6 +351,7 @@ void register_all_iap_framework(JSContext* cx, JS::HandleObject obj) {
     JS_DefineFunction(cx, ns, "consume", js_iap_consume, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
     JS_DefineFunction(cx, ns, "available_products", js_iap_available_products, 2, JSPROP_PERMANENT | JSPROP_ENUMERATE);
     JS_DefineFunction(cx, ns, "product_details", js_iap_product_details, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    JS_DefineFunction(cx, ns, "restore", js_iap_restore, 0, JSPROP_PERMANENT | JSPROP_ENUMERATE);
 }
 
 ///////////////////////////////////////
