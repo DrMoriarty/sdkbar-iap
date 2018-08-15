@@ -35,7 +35,7 @@ public class InAppBillingPlugin {
     static final int RC_REQUEST = 10001;
 
     // The helper object
-    private static IabHelper mHelper;
+    private static IabHelper mHelper = null;
 
     // A quite up to date inventory of available items and purchase items
     private static Inventory myInventory;
@@ -45,16 +45,22 @@ public class InAppBillingPlugin {
     // Public API
     //
 
-    public static boolean init(final String[] skus, final int callbackId) {
+    public static boolean init(final String[] skus, final boolean internalValidation, final int callbackId) {
         // Initialize
 		Log.d(TAG, "init start");
         appActivity = Cocos2dxHelper.getActivity();
 		// Some sanity checks to see if the developer (that's you!) really followed the
         // instructions to run this plugin
-        String base64EncodedPublicKey = getPublicKey();
+        String base64EncodedPublicKey = null;
+        if(internalValidation) {
+            base64EncodedPublicKey = getPublicKey();
 
-	 	if (base64EncodedPublicKey.contains("CONSTRUCT_YOUR"))
-	 		throw new RuntimeException("Please configure your app's public key.");
+            if (base64EncodedPublicKey.contains("CONSTRUCT_YOUR"))
+                throw new RuntimeException("Please configure your app's public key.");
+            Log.d(TAG, "Purchase verification enabled");
+        } else {
+            Log.w(TAG, "Purchase verification disabled");
+        }
 
 	 	// Create the helper, passing it our context and the public key to verify signatures with
         Log.d(TAG, "Creating IAB helper.");
@@ -118,6 +124,15 @@ public class InAppBillingPlugin {
                 }
             });
         return true;
+    }
+
+    public static boolean setDebug(final boolean debug) {
+        if(mHelper != null) {
+            mHelper.enableDebugLogging(debug);
+            return true;
+        } else {
+            return false;
+        }
     }
 
 	// Get the list of purchases

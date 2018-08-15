@@ -1,3 +1,4 @@
+BILLING_KEY = variable('BILLING_KEY')
 
 sdkbox.copy_files(['app'], PLUGIN_PATH, ANDROID_STUDIO_PROJECT_DIR)
 sdkbox.copy_files(['ios'], PLUGIN_PATH, IOS_PROJECT_DIR)
@@ -25,3 +26,9 @@ sdkbar.appDelegateInject({
 
 sdkbox.android_add_sources(['../../Classes/Iap.cpp'])
 
+sdkbar.add_xml_item(ANDROID_STUDIO_PROJECT_DIR+'/app/res/values/strings.xml', {
+  'path': '.',
+  'tag': 'string',
+  'key': 'billing_key_param',
+  'xml': '<string name="billing_key_param">'+BILLING_KEY+'</string>'
+})

@@ -10,4 +10,9 @@
 
 void register_all_iap_framework(JSContext* cx, JS::HandleObject obj);
 
+extern "C"
+{
+    void Java_com_tapclap_inappbilling_InAppBillingPlugin_requestResult(JNIEnv* env, jobject thiz, jint callbackId, jstring err, jstring result);
+};
+
 #endif /* Iap_h */

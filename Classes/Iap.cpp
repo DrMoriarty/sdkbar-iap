@@ -32,6 +32,18 @@ static bool callMethod0(const char* method) {
     return res;
 }
 
+// call: boolean javaMethod(final boolean param)
+static bool callMethod1(const char* method, bool param) {
+    cocos2d::JniMethodInfo methodInfo;
+
+    if (! cocos2d::JniHelper::getStaticMethodInfo(methodInfo, "com/tapclap/inappbilling/InAppBillingPlugin", method, "(Z)Z")) {
+        return false;
+    }
+    bool res = methodInfo.env->CallStaticBooleanMethod(methodInfo.classID, methodInfo.methodID, param);
+    methodInfo.env->DeleteLocalRef(methodInfo.classID);
+    return true;
+}
+
 // call: boolean javaMethod(final int param)
 static bool callMethod1(const char* method, int callbackId) {
     cocos2d::JniMethodInfo methodInfo;
@@ -110,6 +122,25 @@ static bool callMethod2(const char* method, const std::vector<std::string> &para
     return true;
 }
 
+// call: boolean javaMethod(final String[] param1, final boolean param2, final int param3)
+static bool callMethod3(const char* method, const std::vector<std::string> &param1, bool param2, int callbackId) {
+    cocos2d::JniMethodInfo methodInfo;
+
+    if (! cocos2d::JniHelper::getStaticMethodInfo(methodInfo, "com/tapclap/inappbilling/InAppBillingPlugin", method, "([Ljava/lang/String;ZI)Z")) {
+        return false;
+    }
+    jobjectArray args = 0;
+    args = methodInfo.env->NewObjectArray(param1.size(), methodInfo.env->FindClass("java/lang/String"), 0);
+    for(int i=0; i<param1.size(); i++) {
+        jstring s = methodInfo.env->NewStringUTF(param1[i].c_str());
+        methodInfo.env->SetObjectArrayElement(args, i, s);
+    }
+    bool res = methodInfo.env->CallStaticBooleanMethod(methodInfo.classID, methodInfo.methodID, args, param2, callbackId);
+    methodInfo.env->DeleteLocalRef(args);
+    methodInfo.env->DeleteLocalRef(methodInfo.classID);
+    return true;
+}
+
 // call: boolean javaMethod(final String param1, final String param2, final int param3)
 static bool callMethod3(const char* method, const std::string &param1, const std::string &param2, int callbackId) {
     cocos2d::JniMethodInfo methodInfo;
@@ -162,13 +193,14 @@ static bool js_iap_init(JSContext *cx, uint32_t argc, jsval *vp)
     JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
     JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
     JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
-    if(argc == 3) {
-        // skus, callback, this
-        CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(2), args.get(1));
+    if(argc == 4) {
+        // skus, internalValidation, callback, this
+        CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(3), args.get(2));
         std::vector<std::string> arg0;
         JS::RootedValue arg0Val(cx, args.get(0));
         bool ok = jsval_to_std_vector_string(cx, arg0Val, &arg0);
-        if(callMethod2("init", arg0, cb->callbackId)) {
+        bool arg1 = JS::ToBoolean(JS::RootedValue(cx, args.get(1)));
+        if(callMethod3("init", arg0, arg1, cb->callbackId)) {
             rec.rval().set(JSVAL_TRUE);
         } else {
             rec.rval().set(JSVAL_FALSE);
@@ -309,7 +341,7 @@ static bool js_iap_product_details(JSContext *cx, uint32_t argc, jsval *vp)
     JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
     JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
     JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
-    if(argc == 2) {
+    if(argc == 3) {
         // skus, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(2), args.get(1));
         std::vector<std::string> arg0;
@@ -333,6 +365,26 @@ static bool js_iap_restore(JSContext *cx, uint32_t argc, jsval *vp)
     return true;
 }
 
+static bool js_iap_debug(JSContext *cx, uint32_t argc, jsval *vp)
+{
+    printLog("js_iap_debug");
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 1) {
+        bool debug = JS::ToBoolean(JS::RootedValue(cx, args.get(0)));
+        if(callMethod1("setDebug", debug)) {
+            rec.rval().set(JSVAL_TRUE);
+        } else {
+            rec.rval().set(JSVAL_FALSE);
+        }
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
+}
+
 ///////////////////////////////////////
 //
 //  Register JS API
@@ -344,8 +396,8 @@ void register_all_iap_framework(JSContext* cx, JS::HandleObject obj) {
     JS::RootedObject ns(cx);
     get_or_create_js_obj(cx, obj, "iap", &ns);
 
-    // initialize plugin, args: array of skus, callback func, this pointer
-    JS_DefineFunction(cx, ns, "init", js_iap_init, 3, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+    // initialize plugin, args: array of skus, internal validation flag (bool), callback func, this pointer
+    JS_DefineFunction(cx, ns, "init", js_iap_init, 4, JSPROP_PERMANENT | JSPROP_ENUMERATE);
     
     // get purchased items, args: callback func, this pointer
     JS_DefineFunction(cx, ns, "get_purchases", js_iap_get_purchases, 2, JSPROP_PERMANENT | JSPROP_ENUMERATE);
@@ -367,6 +419,9 @@ void register_all_iap_framework(JSContext* cx, JS::HandleObject obj) {
 
     // stub for restore purchasings (will be implemented for iOS)
     JS_DefineFunction(cx, ns, "restore", js_iap_restore, 0, JSPROP_PERMANENT | JSPROP_ENUMERATE);
+
+    // enable/disable debugging logs
+    JS_DefineFunction(cx, ns, "set_debug", js_iap_debug, 1, JSPROP_PERMANENT | JSPROP_ENUMERATE);
 }
 
 ///////////////////////////////////////
