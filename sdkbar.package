@@ -15,11 +15,11 @@ sdkbar.appDelegateInject({
     'marker': SDKBOX_PACKAGE_NAME,
     'android': {
          'include': 'Iap.hpp',
-         'function': 'register_all_admob_framework'
+         'function': 'register_all_iap_framework'
     },
     'ios': {
          'include': 'Iap.h',
-         'function': 'register_all_admob_framework'
+         'function': 'register_all_iap_framework'
     }
 })
 
