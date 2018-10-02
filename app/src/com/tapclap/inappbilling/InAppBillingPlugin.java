@@ -210,13 +210,13 @@ public class InAppBillingPlugin {
 	// Consume a purchase
 	public static boolean consumePurchase(final String sku, final int callbackId) {
 
-		if (mHelper == null){
+		if (mHelper == null) {
             callRequestResult(callbackId, "Did you forget to initialize the plugin?", null);
 			return false;
 		}
 
         // Called when consumption is complete
-        IabHelper.OnConsumeFinishedListener mConsumeFinishedListener = new IabHelper.OnConsumeFinishedListener() {
+        final IabHelper.OnConsumeFinishedListener mConsumeFinishedListener = new IabHelper.OnConsumeFinishedListener() {
                 public void onConsumeFinished(Purchase purchase, IabResult result) {
                     Log.d(TAG, "Consumption finished. Purchase: " + purchase + ", result: " + result);
 
@@ -239,10 +239,15 @@ public class InAppBillingPlugin {
             };
 
 		// Get the purchase from the inventory
-		Purchase purchase = myInventory.getPurchase(sku);
+		final Purchase purchase = myInventory.getPurchase(sku);
 		if (purchase != null) {
 			// Consume it
-			mHelper.consumeAsync(purchase, mConsumeFinishedListener);
+            appActivity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        mHelper.consumeAsync(purchase, mConsumeFinishedListener);
+                    }
+                });
             return true;
 		} else {
             callRequestResult(callbackId, "" + sku + " is not owned so it cannot be consumed", null);
@@ -284,7 +289,7 @@ public class InAppBillingPlugin {
 		Log.d(TAG, "Beginning Sku(s) Query!");
 
         // Listener that's called when we finish querying the details
-        IabHelper.QueryInventoryFinishedListener mGotDetailsListener = new IabHelper.QueryInventoryFinishedListener() {
+        final IabHelper.QueryInventoryFinishedListener mGotDetailsListener = new IabHelper.QueryInventoryFinishedListener() {
                 public void onQueryInventoryFinished(IabResult result, Inventory inventory) {
                     Log.d(TAG, "Inside mGotDetailsListener");
                     if (hasErrorsAndUpdateInventory(result, inventory, callbackId)) 
@@ -309,7 +314,12 @@ public class InAppBillingPlugin {
                 }
             };
 
-		mHelper.queryInventoryAsync(true, Arrays.asList(skus), mGotDetailsListener);
+        appActivity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    mHelper.queryInventoryAsync(true, Arrays.asList(skus), mGotDetailsListener);
+                }
+            });
         return true;
 	}
 
