@@ -170,6 +170,10 @@ public class InAppBillingPlugin {
             callRequestResult(callbackId, "Billing plugin was not initialized", null);
 			return false;
 		}
+        if(mHelper.AsyncInProgress()) {
+            callRequestResult(callbackId, "Another async operation in progress!", null);
+            return false;
+        }
 
         // Callback for when a purchase is finished
         IabHelper.OnIabPurchaseFinishedListener mPurchaseFinishedListener = new IabHelper.OnIabPurchaseFinishedListener() {
@@ -214,6 +218,10 @@ public class InAppBillingPlugin {
             callRequestResult(callbackId, "Did you forget to initialize the plugin?", null);
 			return false;
 		}
+        if(mHelper.AsyncInProgress()) {
+            callRequestResult(callbackId, "Another async operation in progress!", null);
+            return false;
+        }
 
         // Called when consumption is complete
         final IabHelper.OnConsumeFinishedListener mConsumeFinishedListener = new IabHelper.OnConsumeFinishedListener() {
@@ -285,6 +293,10 @@ public class InAppBillingPlugin {
             callRequestResult(callbackId, "Billing plugin was not initialized", null);
 			return false;
 		}
+        if(mHelper.AsyncInProgress()) {
+            callRequestResult(callbackId, "Another async operation in progress!", null);
+            return false;
+        }
 
 		Log.d(TAG, "Beginning Sku(s) Query!");
 
