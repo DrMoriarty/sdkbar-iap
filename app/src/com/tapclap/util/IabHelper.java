@@ -179,6 +179,10 @@ public class IabHelper {
         logDebug("IAB helper created.");
     }
 
+    public boolean IsInited() {
+        return mService != null && mServiceConn != null;
+    }
+
     public boolean AsyncInProgress() {
         return mAsyncInProgress;
     }

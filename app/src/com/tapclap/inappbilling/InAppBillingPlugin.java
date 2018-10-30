@@ -96,7 +96,7 @@ public class InAppBillingPlugin {
                 }
 
                 // Have we been disposed of in the meantime? If so, quit.
-                if (mHelper == null) {
+                if (mHelper == null || !mHelper.IsInited()) {
                     callRequestResult(callbackId, "The billing helper has been disposed", null);
                     return;
                 }
@@ -166,7 +166,7 @@ public class InAppBillingPlugin {
 	public static boolean buy(final String sku, final String developerPayload, final int callbackId) {
         // Buy an item
 
-		if (mHelper == null) {
+		if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "Billing plugin was not initialized", null);
 			return false;
 		}
@@ -189,7 +189,7 @@ public class InAppBillingPlugin {
 	// Buy an item
 	public static boolean subscribe(final String sku, final String developerPayload, final String[] oldPurchasedSkus, final int callbackId) {
         // Subscribe to an item
-		if (mHelper == null) {
+		if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "Billing plugin was not initialized", null);
 			return false;
 		}
@@ -214,7 +214,7 @@ public class InAppBillingPlugin {
 	// Consume a purchase
 	public static boolean consumePurchase(final String sku, final int callbackId) {
 
-		if (mHelper == null) {
+		if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "Did you forget to initialize the plugin?", null);
 			return false;
 		}
@@ -289,7 +289,7 @@ public class InAppBillingPlugin {
 
 	//Get SkuDetails for skus
 	public static boolean getProductDetails(final String[] skus, final int callbackId) {
-		if (mHelper == null) {
+		if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "Billing plugin was not initialized", null);
 			return false;
 		}
@@ -363,7 +363,7 @@ public class InAppBillingPlugin {
         }
 
         // Have we been disposed of in the meantime? If so, quit.
-        if (mHelper == null) {
+        if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "The billing helper has been disposed", null);
         	return true;
         }
@@ -378,7 +378,7 @@ public class InAppBillingPlugin {
         Log.d(TAG, "Purchase finished: " + result + ", purchase: " + purchase);
 
         // Have we been disposed of in the meantime? If so, quit.
-        if (mHelper == null) {
+        if (mHelper == null || !mHelper.IsInited()) {
             callRequestResult(callbackId, "The billing helper has been disposed", null);
             return false;
         }
