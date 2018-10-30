@@ -20,11 +20,15 @@ import com.tapclap.util.IabResult;
 import com.tapclap.util.Inventory;
 import com.tapclap.util.SkuDetails;
 
+import android.content.Context;
 import android.app.Activity;
 import android.content.Intent;
 import android.util.Log;
 import android.preference.PreferenceManager.OnActivityResultListener;
+import android.net.Uri;
 import org.cocos2dx.lib.Cocos2dxHelper;
+import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.ConnectionResult;
 
 public class InAppBillingPlugin {
 	private static final Boolean ENABLE_DEBUG_LOGGING = true;
@@ -40,6 +44,11 @@ public class InAppBillingPlugin {
     // A quite up to date inventory of available items and purchase items
     private static Inventory myInventory;
 
+    public static boolean isGooglePlayServiceEnabled(Context context)
+    {
+        return GooglePlayServicesUtil.isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS ? true : false;
+    }
+
     /////////////////////////
     //
     // Public API
@@ -49,6 +58,15 @@ public class InAppBillingPlugin {
         // Initialize
 		Log.d(TAG, "init start");
         appActivity = Cocos2dxHelper.getActivity();
+
+        if (!isGooglePlayServiceEnabled(appActivity)) {
+            int errorCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(appActivity);
+            if (errorCode == ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED) {
+                // Alert Dialog and prompt user to update App
+                appActivity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.gms")));
+            }
+        }
+
 		// Some sanity checks to see if the developer (that's you!) really followed the
         // instructions to run this plugin
         String base64EncodedPublicKey = null;
