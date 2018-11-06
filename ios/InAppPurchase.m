@@ -148,36 +148,33 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
   DLog(@"WARNING: Your app should be single page to use in-app-purchases. onReset is not supported.");
 }
 
--(void) debug: (CDVInvokedUrlCommand*)command {
+-(void) debug 
+{
     g_debugEnabled = YES;
 }
 
--(void) autoFinish: (CDVInvokedUrlCommand*)command {
+-(void) autoFinish 
+{
     g_autoFinishEnabled = YES;
 }
 
--(void) setup: (CDVInvokedUrlCommand*)command {
-    CDVPluginResult* pluginResult = nil;
+-(BOOL) setup {
 
     if (![SKPaymentQueue canMakePayments]) {
         DLog(@"setup: Cant make payments, plugin disabled.");
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Can't make payments"];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-        return;
+        return NO;
     }
     else {
         DLog(@"setup: OK");
     }
-
-    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"InAppPurchase initialized"];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    return YES;
 }
 
 /**
  * Request product data for the given productIds.
  * See js for further documentation.
  */
-- (void) load: (CDVInvokedUrlCommand*)command {
+- (void) load:(^(void)(NSArray* result))callback {
 
     DLog(@"load: Getting products data");
     NSArray *inArray = [command.arguments objectAtIndex:0];
@@ -185,15 +182,13 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     if ((unsigned long)[inArray count] == 0) {
         DLog(@"load: Empty array");
         NSArray *callbackArgs = [NSArray arrayWithObjects: [NSNull null], [NSNull null], nil];
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:callbackArgs];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        if(callback) callback(callbackArgs);
         return;
     }
 
     if (![[inArray objectAtIndex:0] isKindOfClass:[NSString class]]) {
         DLog(@"load: Not an array of NSString");
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Invalid arguments"];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        if(callback) callback(nil);
         return;
     }
     
@@ -214,71 +209,55 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     DLog(@"load: Product request started");
 }
 
-- (void) purchase: (CDVInvokedUrlCommand*)command {
+- (void) purchase:(NSString*)identifier {
 
     DLog(@"purchase: About to do IAP");
-    id identifier = [command.arguments objectAtIndex:0];
-    id quantity =   [command.arguments objectAtIndex:1];
 
     SKMutablePayment *payment = [SKMutablePayment paymentWithProduct:[self.products objectForKey:identifier]];
-    if ([quantity respondsToSelector:@selector(integerValue)]) {
-        payment.quantity = [quantity integerValue];
-    }
+    payment.quantity = 1;
     [[SKPaymentQueue defaultQueue] addPayment:payment];
 }
 
 //Check if user/device is allowed to make in-app purchases
-- (void) canMakePayments: (CDVInvokedUrlCommand*)command {
+- (BOOL) canMakePayments {
 
-  CDVPluginResult* pluginResult = nil;
-  
   if (![SKPaymentQueue canMakePayments]) {
       DLog(@"canMakePayments: Device can't make payments.");
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Can't make payments"];
+      return NO;
   }
   else {
       DLog(@"canMakePayments: Device can make payments.");
-      pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Can make payments"];
+      return YES;
   }
-  
-  [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
-- (void) restoreCompletedTransactions: (CDVInvokedUrlCommand*)command {
+- (void) restoreCompletedTransactions {
     [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 }
 
 // TODO: rename to pauseDownloads
-- (void) pause: (CDVInvokedUrlCommand*)command {
+- (void) pause {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"pause: Pausing %d active downloads...",[dls count]);
     
     [[SKPaymentQueue defaultQueue] pauseDownloads:dls];
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 // TODO: rename to resumeDownloads
-- (void) resume: (CDVInvokedUrlCommand*)command {
+- (void) resume {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"resume: Resuming %d active downloads...",[dls count]);
     [[SKPaymentQueue defaultQueue] resumeDownloads:[self.currentDownloads allValues]];
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 // TODO: rename to cancelDownloads
-- (void) cancel: (CDVInvokedUrlCommand*)command {
+- (void) cancel {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"cancel: Cancelling %d active downloads...",[dls count]);
     [[SKPaymentQueue defaultQueue] cancelDownloads:[self.currentDownloads allValues]];
-    if (command != nil) {
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-    }
 }
 
 // SKPaymentTransactionObserver methods
@@ -424,7 +403,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     [self.commandDelegate evalJs:js];
 }
 
-- (void) finishTransaction: (CDVInvokedUrlCommand*)command {
+- (BOOL) finishTransaction {
 
     NSString *identifier = (NSString*)[command.arguments objectAtIndex:0];
     DLog(@"finishTransaction: %@", identifier);
@@ -434,19 +413,17 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         transaction = (SKPaymentTransaction*)[self.unfinishedTransactions objectForKey:identifier];
     }
 
-    CDVPluginResult* pluginResult;
     if (transaction) {
         DLog(@"finishTransaction: Transaction %@ finished.", identifier);
         [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
         [self.unfinishedTransactions removeObjectForKey:identifier];
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self transactionFinished:transaction];
+        return YES;
     }
     else {
         DLog(@"finishTransaction: Cannot finish transaction %@.", identifier);
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Cannot finish transaction"];
+        return NO;
     }
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void) paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
@@ -485,7 +462,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     }
 }
 
-- (void) appStoreReceipt: (CDVInvokedUrlCommand*)command {
+- (NSString*) appStoreReceipt {
 
     DLog(@"appStoreRefresh:");
     NSString *base64 = nil;
@@ -493,12 +470,10 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     if (receiptData != nil) {
         base64 = [receiptData convertToBase64];
     }
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
-                                                      messageAsString:base64];
-    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    return base64;
 }
 
-- (void) appStoreRefreshReceipt: (CDVInvokedUrlCommand*)command {
+- (void) appStoreRefreshReceipt {
 
     DLog(@"appStoreRefreshReceipt: Request to refresh app receipt");
     refreshReceiptDelegate = [[RefreshReceiptDelegate alloc] init];

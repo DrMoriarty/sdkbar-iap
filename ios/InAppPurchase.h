@@ -9,11 +9,6 @@
 #import <Foundation/Foundation.h>
 #import <StoreKit/StoreKit.h>
 
-#import <Cordova/CDVPlugin.h>
-
-#ifndef __CORDOVA_4_0_0
-    #import <Cordova/NSData+Base64.h>
-#endif
 
 #import "SKProduct+LocalizedPrice.h"
 #import "FileUtility.h"
@@ -21,7 +16,7 @@
 @class BatchProductsRequestDelegate;
 @class RefreshReceiptDelegate;
 
-@interface InAppPurchase : CDVPlugin <SKPaymentTransactionObserver> {
+@interface InAppPurchase : NSObject <SKPaymentTransactionObserver> {
     NSMutableDictionary *products;
     NSMutableDictionary *unfinishedTransactions;
     NSMutableDictionary *currentDownloads;
@@ -36,26 +31,26 @@
 @property (nonatomic, strong) SKReceiptRefreshRequest* receiptRefreshRequest;
 @property (nonatomic, strong) RefreshReceiptDelegate* refreshReceiptDelegate;
 
-- (void) canMakePayments: (CDVInvokedUrlCommand*)command;
+- (BOOL) canMakePayments;
 
-- (void) setup: (CDVInvokedUrlCommand*)command;
-- (void) load: (CDVInvokedUrlCommand*)command;
-- (void) purchase: (CDVInvokedUrlCommand*)command;
-- (void) appStoreReceipt: (CDVInvokedUrlCommand*)command;
-- (void) appStoreRefreshReceipt: (CDVInvokedUrlCommand*)command;
+- (BOOL) setup;
+- (void) load:(^(void)(NSArray* result))callback;
+- (void) purchase: (NSString*)identifier;
+- (void) appStoreReceipt;
+- (void) appStoreRefreshReceipt;
 
-- (void) pause: (CDVInvokedUrlCommand*)command;
-- (void) resume: (CDVInvokedUrlCommand*)command;
-- (void) cancel: (CDVInvokedUrlCommand*)command;
+- (void) pause;
+- (void) resume;
+- (void) cancel;
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions;
 - (void) paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error;
 - (void) paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue;
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedDownloads:(NSArray *)downloads;
 
-- (void) debug: (CDVInvokedUrlCommand*)command;
-- (void) autoFinish: (CDVInvokedUrlCommand*)command;
-- (void) finishTransaction: (CDVInvokedUrlCommand*)command;
+- (void) debug;
+- (void) autoFinish;
+- (BOOL) finishTransaction;
 
 - (void) onReset;
 - (void) processPendingTransactionUpdates;
@@ -66,12 +61,12 @@
 }
 
 @property (nonatomic,retain) InAppPurchase* plugin;
-@property (nonatomic,retain) CDVInvokedUrlCommand* command;
+//@property (nonatomic,retain) CDVInvokedUrlCommand* command;
 @end;
 
 @interface RefreshReceiptDelegate : NSObject <SKRequestDelegate> {
 }
 
 @property (nonatomic,retain) InAppPurchase* plugin;
-@property (nonatomic,retain) CDVInvokedUrlCommand* command;
+//@property (nonatomic,retain) CDVInvokedUrlCommand* command;
 @end
