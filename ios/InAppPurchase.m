@@ -1,9 +1,3 @@
-//
-//  Created by Matt Kane on 20/02/2011.
-//  Copyright (c) Matt Kane 2011. All rights reserved.
-//  Copyright (c) Jean-Christophe Hoelt 2013
-//
-
 #import "InAppPurchase.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,66 +123,50 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 @synthesize productsRequest, productsRequestDelegate, receiptRefreshRequest, refreshReceiptDelegate;
 
 // Initialize the plugin state
--(void) pluginInitialize {
+-(BOOL) setup {
     self.products = [[NSMutableDictionary alloc] init];
     self.currentDownloads = [[NSMutableDictionary alloc] init];
     self.pendingTransactionUpdates = [[NSMutableArray alloc] init];
     self.unfinishedTransactions = [[NSMutableDictionary alloc] init];
-    if ([SKPaymentQueue canMakePayments]) {
-        [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
-        NSLog(@"InAppPurchase[objc] Initialized.");
-    }
-    else {
-        NSLog(@"InAppPurchase[objc] Initialization failed: payments are disabled.");
-    }
-}
-
-// Reset the plugin state
--(void) onReset {
-  DLog(@"WARNING: Your app should be single page to use in-app-purchases. onReset is not supported.");
-}
-
--(void) debug 
-{
-    g_debugEnabled = YES;
-}
-
--(void) autoFinish 
-{
-    g_autoFinishEnabled = YES;
-}
-
--(BOOL) setup {
 
     if (![SKPaymentQueue canMakePayments]) {
         DLog(@"setup: Cant make payments, plugin disabled.");
         return NO;
-    }
-    else {
+    } else {
+        [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
         DLog(@"setup: OK");
     }
     return YES;
+}
+
+-(void) debug:(BOOL)debug
+{
+    g_debugEnabled = debug;
+}
+
+-(void) autoFinish:(BOOL)autoFinish
+{
+    g_autoFinishEnabled = autoFinish;
 }
 
 /**
  * Request product data for the given productIds.
  * See js for further documentation.
  */
-- (void) load:(^(void)(NSArray* result))callback {
+- (void) load:(NSArray*)inArray withCallback:(void(^)(NSArray* result, NSError* err))callback {
 
     DLog(@"load: Getting products data");
-    NSArray *inArray = [command.arguments objectAtIndex:0];
 
-    if ((unsigned long)[inArray count] == 0) {
+    if (inArray == nil || inArray.count == 0) {
         DLog(@"load: Empty array");
         NSArray *callbackArgs = [NSArray arrayWithObjects: [NSNull null], [NSNull null], nil];
-        if(callback) callback(callbackArgs);
+        if(callback) callback(callbackArgs, nil);
         return;
     }
 
     if (![[inArray objectAtIndex:0] isKindOfClass:[NSString class]]) {
         DLog(@"load: Not an array of NSString");
-        if(callback) callback(nil);
+        if(callback) callback(nil, [NSError errorWithDomain:NSCocoaErrorDomain code:NSCoderInvalidValueError userInfo:nil]);
         return;
     }
     
@@ -202,17 +180,17 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     productsRequestDelegate = [[BatchProductsRequestDelegate alloc] init];
     productsRequest.delegate = productsRequestDelegate;
     productsRequestDelegate.plugin  = self;
-    productsRequestDelegate.command = command;
+    productsRequestDelegate.callback = callback;
 
     DLog(@"load: Starting product request...");
     [productsRequest start];
     DLog(@"load: Product request started");
 }
 
-- (void) purchase:(NSString*)identifier {
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result))callback {
 
     DLog(@"purchase: About to do IAP");
-
+    _transactionCallback = callback;
     SKMutablePayment *payment = [SKMutablePayment paymentWithProduct:[self.products objectForKey:identifier]];
     payment.quantity = 1;
     [[SKPaymentQueue defaultQueue] addPayment:payment];
@@ -231,12 +209,12 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
   }
 }
 
-- (void) restoreCompletedTransactions {
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSError* err))callback {
+    _purchaseRestorationCallback = callback;
     [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 }
 
-// TODO: rename to pauseDownloads
-- (void) pause {
+- (void) pauseDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"pause: Pausing %d active downloads...",[dls count]);
@@ -244,21 +222,104 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     [[SKPaymentQueue defaultQueue] pauseDownloads:dls];
 }
 
-// TODO: rename to resumeDownloads
-- (void) resume {
+- (void) resumeDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"resume: Resuming %d active downloads...",[dls count]);
     [[SKPaymentQueue defaultQueue] resumeDownloads:[self.currentDownloads allValues]];
 }
 
-// TODO: rename to cancelDownloads
-- (void) cancel {
+- (void) cancelDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
     DLog(@"cancel: Cancelling %d active downloads...",[dls count]);
     [[SKPaymentQueue defaultQueue] cancelDownloads:[self.currentDownloads allValues]];
 }
+
+- (BOOL) finishTransaction:(NSString*)identifier {
+
+    DLog(@"finishTransaction: %@", identifier);
+    SKPaymentTransaction *transaction = nil;
+
+    if (identifier) {
+        transaction = (SKPaymentTransaction*)[self.unfinishedTransactions objectForKey:identifier];
+    }
+
+    if (transaction) {
+        DLog(@"finishTransaction: Transaction %@ finished.", identifier);
+        [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+        [self.unfinishedTransactions removeObjectForKey:identifier];
+        [self transactionFinished:transaction];
+        return YES;
+    }
+    else {
+        DLog(@"finishTransaction: Cannot finish transaction %@.", identifier);
+        return NO;
+    }
+}
+
+- (NSData *)appStoreReceiptData {
+    NSURL *receiptURL = nil;
+    NSBundle *bundle = [NSBundle mainBundle];
+    if ([bundle respondsToSelector:@selector(appStoreReceiptURL)]) {
+        // The general best practice of weak linking using the respondsToSelector: method
+        // cannot be used here. Prior to iOS 7, the method was implemented as private SPI,
+        // but that implementation called the doesNotRecognizeSelector: method.
+        if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_6_1) {
+            receiptURL = [bundle performSelector:@selector(appStoreReceiptURL)];
+        }
+    }
+
+    if (receiptURL != nil) {
+        NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
+        return receiptData;
+    }
+    else {
+        return nil;
+    }
+}
+
+- (NSString*) appStoreReceipt {
+
+    DLog(@"appStoreRefresh:");
+    NSString *base64 = nil;
+    NSData *receiptData = [self appStoreReceiptData];
+    if (receiptData != nil) {
+        base64 = [receiptData convertToBase64];
+    }
+    return base64;
+}
+
+- (void) appStoreRefreshReceipt:(void(^)(NSArray* result, NSError* err))callback {
+
+    DLog(@"appStoreRefreshReceipt: Request to refresh app receipt");
+    refreshReceiptDelegate = [[RefreshReceiptDelegate alloc] init];
+    receiptRefreshRequest = [[SKReceiptRefreshRequest alloc] init];
+    receiptRefreshRequest.delegate = refreshReceiptDelegate;
+    refreshReceiptDelegate.plugin  = self;
+    refreshReceiptDelegate.callback = callback;
+    
+    DLog(@"appStoreRefreshReceipt: Starting receipt refresh request...");
+    [receiptRefreshRequest start];
+    DLog(@"appStoreRefreshReceipt: Receipt refresh request started");
+}
+
+- (void) dispose {
+    g_initialized = NO;
+    g_debugEnabled = NO;
+    g_autoFinishEnabled = NO;
+    [self cancel:nil];
+    self.products = nil;
+    self.currentDownloads = nil;
+    self.unfinishedTransactions = nil;
+    self.pendingTransactionUpdates = nil;
+    [[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
+    [super dispose];
+}
+
+
+
+#pragma mark - SKPaymentTransactionObserver
 
 // SKPaymentTransactionObserver methods
 // called when the transaction status is updated
@@ -347,157 +408,16 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     }
 }
 
-- (void) processPendingTransactionUpdates {
-
-    DLog(@"processPendingTransactionUpdates");
-    for (NSArray *ta in pendingTransactionUpdates) {
-        [self processTransactionUpdate:ta[0] withArgs:ta[1]];
-    }
-    [pendingTransactionUpdates removeAllObjects];
-}
-
-- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs {
-
-    DLog(@"processTransactionUpdate:withArgs: transactionIdentifier=%@", callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]);
-    NSString *js = [NSString
-        stringWithFormat:@"window.storekit.updatedTransactionCallback.apply(window.storekit, %@)",
-        [callbackArgs JSONSerialize]];
-    [self.commandDelegate evalJs:js];
-
-    NSArray *downloads = nil;
-    SKPaymentTransactionState state = transaction.transactionState;
-    if (state == SKPaymentTransactionStateRestored || state == SKPaymentTransactionStatePurchased) {
-        downloads = transaction.downloads;
-    }
-
-    BOOL canFinish = state == SKPaymentTransactionStateRestored
-        || state == SKPaymentTransactionStateFailed
-        || state == SKPaymentTransactionStatePurchased;
-
-    if (downloads && [downloads count] > 0) {
-        [[SKPaymentQueue defaultQueue] startDownloads:downloads];
-    }
-    else if (g_autoFinishEnabled && canFinish) {
-        [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-        [self transactionFinished:transaction];
-    }
-    else {
-        [self.unfinishedTransactions setObject:transaction forKey:callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]];
-    }
-}
-
-- (void) transactionFinished: (SKPaymentTransaction*) transaction {
-    DLog(@"transactionFinished: %@", transaction.transactionIdentifier);
-
-    NSArray *callbackArgs = [NSArray arrayWithObjects:
-        NILABLE(@"PaymentTransactionStateFinished"),
-        [NSNumber numberWithInt:0], // Fixed to send object. The 0 was stopping the array.
-        NILABLE(nil),
-        NILABLE(transaction.transactionIdentifier),
-        NILABLE(transaction.payment.productIdentifier),
-        NILABLE(nil),
-        nil];
-    NSString *js = [NSString
-        stringWithFormat:@"window.storekit.updatedTransactionCallback.apply(window.storekit, %@)",
-        [callbackArgs JSONSerialize]];
-    [self.commandDelegate evalJs:js];
-}
-
-- (BOOL) finishTransaction {
-
-    NSString *identifier = (NSString*)[command.arguments objectAtIndex:0];
-    DLog(@"finishTransaction: %@", identifier);
-    SKPaymentTransaction *transaction = nil;
-
-    if (identifier) {
-        transaction = (SKPaymentTransaction*)[self.unfinishedTransactions objectForKey:identifier];
-    }
-
-    if (transaction) {
-        DLog(@"finishTransaction: Transaction %@ finished.", identifier);
-        [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-        [self.unfinishedTransactions removeObjectForKey:identifier];
-        [self transactionFinished:transaction];
-        return YES;
-    }
-    else {
-        DLog(@"finishTransaction: Cannot finish transaction %@.", identifier);
-        return NO;
-    }
-}
-
 - (void) paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
 
     DLog(@"paymentQueue:restoreCompletedTransactionsFailedWithError:");
-    NSString *js = [NSString stringWithFormat:
-        @"window.storekit.restoreCompletedTransactionsFailed(%li)", (unsigned long)jsErrorCode(error.code)];
-    [self.commandDelegate evalJs: js];
+    if(_purchaseRestorationCallback) _purchaseRestorationCallback(error);
 }
 
 - (void) paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
 
     DLog(@"paymentQueueRestoreCompletedTransactionsFinished:");
-    NSString *js = @"window.storekit.restoreCompletedTransactionsFinished.apply(window.storekit)";
-    [self.commandDelegate evalJs: js];
-}
-
-- (NSData *)appStoreReceipt {
-    NSURL *receiptURL = nil;
-    NSBundle *bundle = [NSBundle mainBundle];
-    if ([bundle respondsToSelector:@selector(appStoreReceiptURL)]) {
-        // The general best practice of weak linking using the respondsToSelector: method
-        // cannot be used here. Prior to iOS 7, the method was implemented as private SPI,
-        // but that implementation called the doesNotRecognizeSelector: method.
-        if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_6_1) {
-            receiptURL = [bundle performSelector:@selector(appStoreReceiptURL)];
-        }
-    }
-
-    if (receiptURL != nil) {
-        NSData *receiptData = [NSData dataWithContentsOfURL:receiptURL];
-        return receiptData;
-    }
-    else {
-        return nil;
-    }
-}
-
-- (NSString*) appStoreReceipt {
-
-    DLog(@"appStoreRefresh:");
-    NSString *base64 = nil;
-    NSData *receiptData = [self appStoreReceipt];
-    if (receiptData != nil) {
-        base64 = [receiptData convertToBase64];
-    }
-    return base64;
-}
-
-- (void) appStoreRefreshReceipt {
-
-    DLog(@"appStoreRefreshReceipt: Request to refresh app receipt");
-    refreshReceiptDelegate = [[RefreshReceiptDelegate alloc] init];
-    receiptRefreshRequest = [[SKReceiptRefreshRequest alloc] init];
-    receiptRefreshRequest.delegate = refreshReceiptDelegate;
-    refreshReceiptDelegate.plugin  = self;
-    refreshReceiptDelegate.command = command;
-    
-    DLog(@"appStoreRefreshReceipt: Starting receipt refresh request...");
-    [receiptRefreshRequest start];
-    DLog(@"appStoreRefreshReceipt: Receipt refresh request started");
-}
-
-- (void) dispose {
-    g_initialized = NO;
-    g_debugEnabled = NO;
-    g_autoFinishEnabled = NO;
-    [self cancel:nil];
-    self.products = nil;
-    self.currentDownloads = nil;
-    self.unfinishedTransactions = nil;
-    self.pendingTransactionUpdates = nil;
-    [[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
-    [super dispose];
+    if(_purchaseRestorationCallback) _purchaseRestorationCallback(nil);
 }
 
 /****************************************************************************************************************
@@ -615,11 +535,103 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
             NILABLE(progress_s),
             NILABLE(timeRemaining_s),
             nil];
-        js = [NSString
-            stringWithFormat:@"window.storekit.updatedDownloadCallback.apply(window.storekit, %@)",
-            [callbackArgs JSONSerialize]];
-        [self.commandDelegate evalJs:js];
-        
+
+        if(_updatedDownloadsCallback) _updatedDownloadsCallback(callbackArgs);
+    }
+}
+
+//
+// paymentQueue:shouldAddStorePayment:forProduct:
+// ----------------------------------------------
+// Tells the observer that a user initiated an in-app purchase from the App Store.
+//
+// Return true to continue the transaction in your app.
+// Return false to defer or cancel the transaction.
+//        If you return false, you can continue the transaction later by manually adding the SKPayment
+//        payment to the SKPaymentQueue queue.
+//
+// Discussion:
+// -----------
+// This delegate method is called when the user starts an in-app purchase in the App Store, and the
+// transaction continues in your app. Specifically, if your app is already installed, the method is
+// called automatically.
+// If your app is not yet installed when the user starts the in-app purchase in the App Store, the
+// user gets a notification when the app installation is complete. This method is called when the
+// user taps the notification. Otherwise, if the user opens the app manually, this method is called
+// only if the app is opened soon after the purchase was started.
+//
+- (BOOL)paymentQueue:(SKPaymentQueue *)queue shouldAddStorePayment:(SKPayment *)payment forProduct:(SKProduct *)product {
+
+    // Here, I though I have to check for the existance of the product in the list of known products
+    // and only do the processing if it is known.
+    // The problem is: this call will most likely always happen before products have been loaded.
+    // Since the "fix/ios-early-observer" change, transaction update events are queued for processing
+    // till JS is ready to process them, so initiating the payment in all cases shouldn't be an issue.
+    //
+    // Only thing is: the developper needs to be sure to handle all types of IAP defines on the AppStore.
+    // Which should be OK...
+    //
+    
+    // Let's check if we already loaded this product informations.
+    // Since it's provided to us generously, let's store them here.
+    NSString *productId = payment.productIdentifier;
+    if (self.products && product && ![self.products objectForKey:productId]) {
+        [self.products setObject:product forKey:[NSString stringWithFormat:@"%@", productId]];
+    }
+
+    return YES;
+}
+
+
+#pragma mark - Utils
+
+- (void) transactionFinished: (SKPaymentTransaction*) transaction {
+    DLog(@"transactionFinished: %@", transaction.transactionIdentifier);
+
+    NSArray *callbackArgs = [NSArray arrayWithObjects:
+        NILABLE(@"PaymentTransactionStateFinished"),
+        [NSNumber numberWithInt:transaction.error.code],
+        NILABLE(transaction.error),
+        NILABLE(transaction.transactionIdentifier),
+        NILABLE(transaction.payment.productIdentifier),
+        NILABLE(nil),
+        nil];
+    if(_transactionCallback) _transactionCallback(callbackArgs);
+}
+
+- (void) processPendingTransactionUpdates {
+
+    DLog(@"processPendingTransactionUpdates");
+    for (NSArray *ta in pendingTransactionUpdates) {
+        [self processTransactionUpdate:ta[0] withArgs:ta[1]];
+    }
+    [pendingTransactionUpdates removeAllObjects];
+}
+
+- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs {
+
+    DLog(@"processTransactionUpdate:withArgs: transactionIdentifier=%@", callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]);
+    if(_transactionCallback) _transactionCallback(callbackArgs);
+
+    NSArray *downloads = nil;
+    SKPaymentTransactionState state = transaction.transactionState;
+    if (state == SKPaymentTransactionStateRestored || state == SKPaymentTransactionStatePurchased) {
+        downloads = transaction.downloads;
+    }
+
+    BOOL canFinish = state == SKPaymentTransactionStateRestored
+        || state == SKPaymentTransactionStateFailed
+        || state == SKPaymentTransactionStatePurchased;
+
+    if (downloads && [downloads count] > 0) {
+        [[SKPaymentQueue defaultQueue] startDownloads:downloads];
+    }
+    else if (g_autoFinishEnabled && canFinish) {
+        [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+        [self transactionFinished:transaction];
+    }
+    else {
+        [self.unfinishedTransactions setObject:transaction forKey:callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]];
     }
 }
 
@@ -674,61 +686,19 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     
 }
 
-//
-// paymentQueue:shouldAddStorePayment:forProduct:
-// ----------------------------------------------
-// Tells the observer that a user initiated an in-app purchase from the App Store.
-//
-// Return true to continue the transaction in your app.
-// Return false to defer or cancel the transaction.
-//        If you return false, you can continue the transaction later by manually adding the SKPayment
-//        payment to the SKPaymentQueue queue.
-//
-// Discussion:
-// -----------
-// This delegate method is called when the user starts an in-app purchase in the App Store, and the
-// transaction continues in your app. Specifically, if your app is already installed, the method is
-// called automatically.
-// If your app is not yet installed when the user starts the in-app purchase in the App Store, the
-// user gets a notification when the app installation is complete. This method is called when the
-// user taps the notification. Otherwise, if the user opens the app manually, this method is called
-// only if the app is opened soon after the purchase was started.
-//
-- (BOOL)paymentQueue:(SKPaymentQueue *)queue shouldAddStorePayment:(SKPayment *)payment forProduct:(SKProduct *)product {
-
-    // Here, I though I have to check for the existance of the product in the list of known products
-    // and only do the processing if it is known.
-    // The problem is: this call will most likely always happen before products have been loaded.
-    // Since the "fix/ios-early-observer" change, transaction update events are queued for processing
-    // till JS is ready to process them, so initiating the payment in all cases shouldn't be an issue.
-    //
-    // Only thing is: the developper needs to be sure to handle all types of IAP defines on the AppStore.
-    // Which should be OK...
-    //
-    
-    // Let's check if we already loaded this product informations.
-    // Since it's provided to us generously, let's store them here.
-    NSString *productId = payment.productIdentifier;
-    if (self.products && product && ![self.products objectForKey:productId]) {
-        [self.products setObject:product forKey:[NSString stringWithFormat:@"%@", productId]];
-    }
-
-    return YES;
-}
-
 @end
 /**
  * Receive refreshed app receipt
  */
 @implementation RefreshReceiptDelegate
 
-@synthesize plugin, command;
+@synthesize plugin;
 
 - (void) requestDidFinish:(SKRequest *)request {
 
     DLog(@"RefreshReceiptDelegate.requestDidFinish: Got refreshed receipt");
     NSString *base64 = nil;
-    NSData *receiptData = [self.plugin appStoreReceipt];
+    NSData *receiptData = [self.plugin appStoreReceiptData];
     if (receiptData != nil) {
         base64 = [receiptData convertToBase64];
         // DLog(@"base64 receipt: %@", base64);
@@ -741,18 +711,14 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         NILABLE([bundle.infoDictionary objectForKey:@"CFBundleNumericVersion"]),
         NILABLE([bundle.infoDictionary objectForKey:@"CFBundleSignature"]),
         nil];
-    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
-                                                      messageAsArray:callbackArgs];
     DLog(@"RefreshReceiptDelegate.requestDidFinish: Send new receipt data");
-    [self.plugin.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    if(_callback) _callback(callbackArgs, nil);
 }
 
 - (void):(SKRequest *)request didFailWithError:(NSError*) error {
     DLog(@"RefreshReceiptDelegate.request didFailWithError: In-App Store unavailable (ERROR %li)", (unsigned long)error.code);
     DLog(@"RefreshReceiptDelegate.request didFailWithError: %@", [error localizedDescription]);
-    CDVPluginResult* pluginResult =
-    [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:[error localizedDescription]];
-    [self.plugin.commandDelegate sendPluginResult:pluginResult callbackId:self.command.callbackId];
+    if(_callback) _callback(nil, error);
 }
 
 @end
@@ -763,7 +729,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
  */
 @implementation BatchProductsRequestDelegate
 
-@synthesize plugin, command;
+@synthesize plugin;
 
 - (void)productsRequest:(SKProductsRequest*)request didReceiveResponse:(SKProductsResponse*)response {
 
@@ -795,10 +761,8 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         NILABLE(response.invalidProductIdentifiers),
         nil];
 
-    CDVPluginResult* pluginResult =
-        [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:callbackArgs];
+    if(_callback) _callback(callbackArgs, nil);
     DLog(@"BatchProductsRequestDelegate.productsRequest:didReceiveResponse: sendPluginResult: %@", callbackArgs);
-    [self.plugin.commandDelegate sendPluginResult:pluginResult callbackId:self.command.callbackId];
 
     // Now that we have loaded product informations, we can safely process pending transactions.
     g_initialized = YES;
@@ -814,9 +778,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         localizedDescription = @"AppStore unavailable";
     else
         DLog(@"BatchProductsRequestDelegate.request:didFailWithError: %@", localizedDescription);
-    CDVPluginResult* pluginResult =
-        [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:localizedDescription];
-    [self.plugin.commandDelegate sendPluginResult:pluginResult callbackId:self.command.callbackId];
+    if(_callback) _callback(nil, error);
 }
 
 @end

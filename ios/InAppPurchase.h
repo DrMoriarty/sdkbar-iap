@@ -1,11 +1,3 @@
-//
-//  InAppPurchase.h
-//  beetight
-//
-//  Created by Matt Kane on 20/02/2011.
-//  Copyright 2011 Matt Kane. All rights reserved.
-//
-
 #import <Foundation/Foundation.h>
 #import <StoreKit/StoreKit.h>
 
@@ -31,42 +23,51 @@
 @property (nonatomic, strong) SKReceiptRefreshRequest* receiptRefreshRequest;
 @property (nonatomic, strong) RefreshReceiptDelegate* refreshReceiptDelegate;
 
+@property (nonatomic, strong) void(^updatedDownloadsCallback)(NSArray* result);
+@property (nonatomic, strong) void(^purchaseRestorationCallback)(NSError* err);
+@property (nonatomic, strong) void(^transactionCallback)(NSArray* result);
+
 - (BOOL) canMakePayments;
 
 - (BOOL) setup;
-- (void) load:(^(void)(NSArray* result))callback;
-- (void) purchase: (NSString*)identifier;
-- (void) appStoreReceipt;
-- (void) appStoreRefreshReceipt;
+- (void) load:(NSArray*)inArray withCallback:(void(^)(NSArray* result, NSError* err))callback;
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result))callback;
+- (NSString*) appStoreReceipt;
+- (void) appStoreRefreshReceipt:(void(^)(NSArray* result, NSError* err))callback;
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSError* err))callback;
 
-- (void) pause;
-- (void) resume;
-- (void) cancel;
+- (void) pauseDownloads;
+- (void) resumeDownloads;
+- (void) cancelDownloads;
+
+- (void) debug:(BOOL)debug;
+- (void) autoFinish:(BOOL)autoFinish;
+- (BOOL) finishTransaction:(NSString*)identifier;
+
+#pragma mark - SKPaymentTransactionObserver
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions;
 - (void) paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error;
 - (void) paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue;
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedDownloads:(NSArray *)downloads;
 
-- (void) debug;
-- (void) autoFinish;
-- (BOOL) finishTransaction;
+#pragma mark - Utils
 
-- (void) onReset;
 - (void) processPendingTransactionUpdates;
 - (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs;
+
 @end
 
 @interface BatchProductsRequestDelegate : NSObject <SKProductsRequestDelegate> {
 }
 
 @property (nonatomic,retain) InAppPurchase* plugin;
-//@property (nonatomic,retain) CDVInvokedUrlCommand* command;
+@property (nonatomic,retain) void(^callback)(NSArray* result, NSError* err);
 @end;
 
 @interface RefreshReceiptDelegate : NSObject <SKRequestDelegate> {
 }
 
 @property (nonatomic,retain) InAppPurchase* plugin;
-//@property (nonatomic,retain) CDVInvokedUrlCommand* command;
+@property (nonatomic,retain) void(^callback)(NSArray* result, NSError* err);
 @end
