@@ -602,7 +602,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 
     NSArray *callbackArgs = [NSArray arrayWithObjects:
         NILABLE(@"PaymentTransactionStateFinished"),
-        [NSNumber numberWithInt:transaction.error.code],
+        [NSNumber numberWithInteger:transaction.error.code],
         NILABLE(transaction.error),
         NILABLE(transaction.transactionIdentifier),
         NILABLE(transaction.payment.productIdentifier),

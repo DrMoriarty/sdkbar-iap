@@ -334,19 +334,16 @@ static bool js_iap_available_products(JSContext *cx, uint32_t argc, jsval *vp)
         // callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(1), args.get(0));
         NSMutableArray *result = [NSMutableArray new];
-        NSNumberFormatter *numberFormatter = [[NSNumberFormatter alloc] init];
-        [numberFormatter setFormatterBehavior:NSNumberFormatterBehavior10_4];
-        [numberFormatter setNumberStyle:NSNumberFormatterCurrencyStyle];
-        for(SKProduct *product in inAppPurchase.products) {
-            [numberFormatter setLocale:product.priceLocale];
+        for(NSString *productId in [inAppPurchase.products allKeys]) {
+            SKProduct *product = inAppPurchase.products[productId];
             [result addObject:@{
                     @"productId": product.productIdentifier,
                     @"type": @"",
-                    @"price": [numberFormatter stringFromNumber:product.price],
+                    @"price": [NSString stringWithFormat:@"%@", product.price],
                     @"title": product.localizedTitle,
                     @"name": product.localizedTitle,
                     @"description": product.localizedDescription,
-                    @"price_currency_code": product.priceLocale.languageCode
+                    @"price_currency_code": product.priceLocale.currencySymbol
             }];
         }
         callback(cb->callbackId, result, nil);
