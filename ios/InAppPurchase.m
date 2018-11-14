@@ -139,12 +139,12 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     return YES;
 }
 
--(void) debug:(BOOL)debug
++(void) debug:(BOOL)debug
 {
     g_debugEnabled = debug;
 }
 
--(void) autoFinish:(BOOL)autoFinish
++(void) autoFinish:(BOOL)autoFinish
 {
     g_autoFinishEnabled = autoFinish;
 }
@@ -166,7 +166,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 
     if (![[inArray objectAtIndex:0] isKindOfClass:[NSString class]]) {
         DLog(@"load: Not an array of NSString");
-        if(callback) callback(nil, [NSError errorWithDomain:NSCocoaErrorDomain code:NSCoderInvalidValueError userInfo:nil]);
+        if(callback) callback(nil, [NSError errorWithDomain:NSCocoaErrorDomain code:NSKeyValueValidationError userInfo:nil]);
         return;
     }
     
@@ -187,7 +187,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     DLog(@"load: Product request started");
 }
 
-- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result))callback {
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result, NSError* err))callback {
 
     DLog(@"purchase: About to do IAP");
     _transactionCallback = callback;
@@ -209,8 +209,9 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
   }
 }
 
-- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSError* err))callback {
-    _purchaseRestorationCallback = callback;
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSArray* result, NSError* err))callback {
+    //_purchaseRestorationCallback = callback;
+    _transactionCallback = callback;
     [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 }
 
@@ -256,6 +257,16 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         DLog(@"finishTransaction: Cannot finish transaction %@.", identifier);
         return NO;
     }
+}
+
+- (NSArray<NSString*>*) getUnfinishedTransactions
+{
+    DLog(@"getUnfinishedTransactions");
+    NSMutableArray *result = [NSMutableArray new];
+    for(SKPaymentTransaction *transaction in self.unfinishedTransactions) {
+        [result addObject:transaction.transactionIdentifier];
+    }
+    return result;
 }
 
 - (NSData *)appStoreReceiptData {
@@ -308,7 +319,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     g_initialized = NO;
     g_debugEnabled = NO;
     g_autoFinishEnabled = NO;
-    [self cancel:nil];
+    [self cancelDownloads];
     self.products = nil;
     self.currentDownloads = nil;
     self.unfinishedTransactions = nil;
@@ -411,13 +422,15 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
 
     DLog(@"paymentQueue:restoreCompletedTransactionsFailedWithError:");
-    if(_purchaseRestorationCallback) _purchaseRestorationCallback(error);
+    //if(_purchaseRestorationCallback) _purchaseRestorationCallback(error);
+    if(_transactionCallback) _transactionCallback(nil, error);
 }
 
 - (void) paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
 
     DLog(@"paymentQueueRestoreCompletedTransactionsFinished:");
-    if(_purchaseRestorationCallback) _purchaseRestorationCallback(nil);
+    //if(_purchaseRestorationCallback) _purchaseRestorationCallback(nil);
+    if(_transactionCallback) _transactionCallback(nil, nil);
 }
 
 /****************************************************************************************************************
@@ -441,7 +454,6 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         NSString *productId = payment.productIdentifier;
         
         NSArray *callbackArgs;
-        NSString *js;
         
         switch (download.downloadState) {
 
@@ -596,7 +608,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         NILABLE(transaction.payment.productIdentifier),
         NILABLE(nil),
         nil];
-    if(_transactionCallback) _transactionCallback(callbackArgs);
+    if(_transactionCallback) _transactionCallback(callbackArgs, transaction.error);
 }
 
 - (void) processPendingTransactionUpdates {
@@ -611,7 +623,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs {
 
     DLog(@"processTransactionUpdate:withArgs: transactionIdentifier=%@", callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]);
-    if(_transactionCallback) _transactionCallback(callbackArgs);
+    if(_transactionCallback) _transactionCallback(callbackArgs, nil);
 
     NSArray *downloads = nil;
     SKPaymentTransactionState state = transaction.transactionState;

@@ -42,6 +42,20 @@ static NSArray<NSString*>* jsval_to_array(JSContext* cx, JS::HandleValue v) {
     return result;
 }
 
+static NSString* jsval_to_string(JSContext* cx, JS::HandleValue v)
+{
+    if (v.isNullOrUndefined())
+    {
+        return nil;
+    }
+    if (v.isString()) {
+        JSStringWrapper valueWrapper(v.toString(), cx);
+        return [NSString stringWithUTF8String:valueWrapper.get()];
+    } else {
+        return nil;
+    }
+}
+
 static NSDictionary* jsval_to_dictionary(JSContext* cx, JS::HandleValue v)
 {
     if (v.isNullOrUndefined())
@@ -181,7 +195,6 @@ static void callback(int callbackId, id result, NSString* errorStr)
         valArr.append(JSVAL_NULL);
     } else {
         valArr.append(JSVAL_NULL);
-        Status err;
         jsval js_result = object_to_jsval(cb->cx, result);
         valArr.append(js_result);
     };
@@ -211,7 +224,7 @@ static bool js_iap_init(JSContext *cx, uint32_t argc, jsval *vp)
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(3), args.get(2));
         JS::RootedValue arg0Val(cx, args.get(0));
         NSArray *skus = jsval_to_array(cx, arg0Val);
-        bool arg1 = JS::ToBoolean(JS::RootedValue(cx, args.get(1)));
+        //bool arg1 = JS::ToBoolean(JS::RootedValue(cx, args.get(1)));
         if([inAppPurchase setup]) {
             rec.rval().set(JSVAL_TRUE);
             [inAppPurchase load:skus withCallback:^(NSArray* result, NSError* err) {
@@ -236,13 +249,9 @@ static bool js_iap_get_purchases(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 2) {
         // callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(1), args.get(0));
-        /*
-        if(callMethod1("getPurchases", cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        NSArray<NSString*>* ids = [inAppPurchase getUnfinishedTransactions];
+        callback(cb->callbackId, ids, nil);
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -259,19 +268,11 @@ static bool js_iap_buy(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 4) {
         // sku, payload, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(3), args.get(2));
-        std::string arg0;
-        JS::RootedValue arg0Val(cx, args.get(0));
-        bool ok = jsval_to_std_string(cx, arg0Val, &arg0);
-        std::string arg1;
-        JS::RootedValue arg1Val(cx, args.get(1));
-        ok &= jsval_to_std_string(cx, arg1Val, &arg1);
-        /*
-        if(callMethod3("buy", arg0, arg1, cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        NSString *sku = jsval_to_string(cx, args.get(0));
+        [inAppPurchase purchase:sku withCallback:^(NSArray* result, NSError* err) {
+            callback(cb->callbackId, result, err.localizedDescription);
+        }];
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -288,22 +289,11 @@ static bool js_iap_subscribe(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 5) {
         // sku, payload, oldPurchasedSkus, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(4), args.get(3));
-        std::string arg0;
-        JS::RootedValue arg0Val(cx, args.get(0));
-        bool ok = jsval_to_std_string(cx, arg0Val, &arg0);
-        std::string arg1;
-        JS::RootedValue arg1Val(cx, args.get(1));
-        ok &= jsval_to_std_string(cx, arg1Val, &arg1);
-        std::vector<std::string> arg2;
-        JS::RootedValue arg2Val(cx, args.get(2));
-        ok &= jsval_to_std_vector_string(cx, arg2Val, &arg2);
-        /*
-        if(callMethod4("subscribe", arg0, arg1, arg2, cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        NSString *sku = jsval_to_string(cx, args.get(0));
+        [inAppPurchase purchase:sku withCallback:^(NSArray* result, NSError* err) {
+            callback(cb->callbackId, result, err.localizedDescription);
+        }];
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -320,16 +310,13 @@ static bool js_iap_consume(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 3) {
         // sku, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(2), args.get(1));
-        std::string arg0;
-        JS::RootedValue arg0Val(cx, args.get(0));
-        bool ok = jsval_to_std_string(cx, arg0Val, &arg0);
-        /*
-        if(callMethod2("consumePurchase", arg0, cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        NSString *sku = jsval_to_string(cx, args.get(0));
+        inAppPurchase.transactionCallback = ^(NSArray* result, NSError* err)
+            {
+             callback(cb->callbackId, result, err.localizedDescription);
+            };
+        [inAppPurchase finishTransaction:sku];
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -346,13 +333,24 @@ static bool js_iap_available_products(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 2) {
         // callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(1), args.get(0));
-        /*
-        if(callMethod1("getAvailableProducts", cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
+        NSMutableArray *result = [NSMutableArray new];
+        NSNumberFormatter *numberFormatter = [[NSNumberFormatter alloc] init];
+        [numberFormatter setFormatterBehavior:NSNumberFormatterBehavior10_4];
+        [numberFormatter setNumberStyle:NSNumberFormatterCurrencyStyle];
+        for(SKProduct *product in inAppPurchase.products) {
+            [numberFormatter setLocale:product.priceLocale];
+            [result addObject:@{
+                    @"productId": product.productIdentifier,
+                    @"type": @"",
+                    @"price": [numberFormatter stringFromNumber:product.price],
+                    @"title": product.localizedTitle,
+                    @"name": product.localizedTitle,
+                    @"description": product.localizedDescription,
+                    @"price_currency_code": product.priceLocale.languageCode
+            }];
         }
-        */
+        callback(cb->callbackId, result, nil);
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -369,16 +367,11 @@ static bool js_iap_product_details(JSContext *cx, uint32_t argc, jsval *vp)
     if(argc == 3) {
         // skus, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(2), args.get(1));
-        std::vector<std::string> arg0;
-        JS::RootedValue arg0Val(cx, args.get(0));
-        bool ok = jsval_to_std_vector_string(cx, arg0Val, &arg0);
-        /*
-        if(callMethod2("getProductDetails", arg0, cb->callbackId)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        NSArray *skus = jsval_to_array(cx, args.get(0));
+        [inAppPurchase load:skus withCallback:^(NSArray* result, NSError* err) {
+                callback(cb->callbackId, result, err.localizedDescription);
+            }];
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -389,7 +382,21 @@ static bool js_iap_product_details(JSContext *cx, uint32_t argc, jsval *vp)
 static bool js_iap_restore(JSContext *cx, uint32_t argc, jsval *vp)
 {
     printLog("js_iap_restore");
-    return true;
+    JS::CallArgs args = JS::CallArgsFromVp(argc, vp);
+    JS::RootedObject obj(cx, args.thisv().toObjectOrNull());
+    JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
+    if(argc == 2) {
+        // callback, this
+        CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(1), args.get(0));
+        [inAppPurchase appStoreRefreshReceipt:^(NSArray* result, NSError* err){
+                callback(cb->callbackId, result, err.localizedDescription);
+            }];
+        rec.rval().set(JSVAL_TRUE);
+        return true;
+    } else {
+        JS_ReportError(cx, "Invalid number of arguments");
+        return false;
+    }
 }
 
 static bool js_iap_debug(JSContext *cx, uint32_t argc, jsval *vp)
@@ -400,13 +407,8 @@ static bool js_iap_debug(JSContext *cx, uint32_t argc, jsval *vp)
     JS::CallReceiver rec = JS::CallReceiverFromVp(vp);
     if(argc == 1) {
         bool debug = JS::ToBoolean(JS::RootedValue(cx, args.get(0)));
-        /*
-        if(callMethod1("setDebug", debug)) {
-            rec.rval().set(JSVAL_TRUE);
-        } else {
-            rec.rval().set(JSVAL_FALSE);
-        }
-        */
+        [InAppPurchase debug:debug];
+        rec.rval().set(JSVAL_TRUE);
         return true;
     } else {
         JS_ReportError(cx, "Invalid number of arguments");
@@ -452,4 +454,3 @@ void register_all_iap_framework(JSContext* cx, JS::HandleObject obj) {
     // enable/disable debugging logs
     JS_DefineFunction(cx, ns, "set_debug", js_iap_debug, 1, JSPROP_PERMANENT | JSPROP_ENUMERATE);
 }
-

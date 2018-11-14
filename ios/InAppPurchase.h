@@ -24,25 +24,26 @@
 @property (nonatomic, strong) RefreshReceiptDelegate* refreshReceiptDelegate;
 
 @property (nonatomic, strong) void(^updatedDownloadsCallback)(NSArray* result);
-@property (nonatomic, strong) void(^purchaseRestorationCallback)(NSError* err);
-@property (nonatomic, strong) void(^transactionCallback)(NSArray* result);
+//@property (nonatomic, strong) void(^purchaseRestorationCallback)(NSError* err);
+@property (nonatomic, strong) void(^transactionCallback)(NSArray* result, NSError* err);
 
 - (BOOL) canMakePayments;
 
 - (BOOL) setup;
 - (void) load:(NSArray*)inArray withCallback:(void(^)(NSArray* result, NSError* err))callback;
-- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result))callback;
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result, NSError* err))callback;
 - (NSString*) appStoreReceipt;
 - (void) appStoreRefreshReceipt:(void(^)(NSArray* result, NSError* err))callback;
-- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSError* err))callback;
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSArray* result, NSError* err))callback;
 
 - (void) pauseDownloads;
 - (void) resumeDownloads;
 - (void) cancelDownloads;
 
-- (void) debug:(BOOL)debug;
-- (void) autoFinish:(BOOL)autoFinish;
++ (void) debug:(BOOL)debug;
++ (void) autoFinish:(BOOL)autoFinish;
 - (BOOL) finishTransaction:(NSString*)identifier;
+- (NSArray<NSString*>*) getUnfinishedTransactions;
 
 #pragma mark - SKPaymentTransactionObserver
 
@@ -61,13 +62,13 @@
 @interface BatchProductsRequestDelegate : NSObject <SKProductsRequestDelegate> {
 }
 
-@property (nonatomic,retain) InAppPurchase* plugin;
-@property (nonatomic,retain) void(^callback)(NSArray* result, NSError* err);
+@property (nonatomic, retain) InAppPurchase* plugin;
+@property (nonatomic, copy) void(^callback)(NSArray* result, NSError* err);
 @end;
 
 @interface RefreshReceiptDelegate : NSObject <SKRequestDelegate> {
 }
 
-@property (nonatomic,retain) InAppPurchase* plugin;
-@property (nonatomic,retain) void(^callback)(NSArray* result, NSError* err);
+@property (nonatomic, retain) InAppPurchase* plugin;
+@property (nonatomic, copy) void(^callback)(NSArray* result, NSError* err);
 @end
