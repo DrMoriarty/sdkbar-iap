@@ -23,18 +23,18 @@
 @property (nonatomic, strong) SKReceiptRefreshRequest* receiptRefreshRequest;
 @property (nonatomic, strong) RefreshReceiptDelegate* refreshReceiptDelegate;
 
-@property (nonatomic, strong) void(^updatedDownloadsCallback)(NSArray* result);
+@property (nonatomic, strong) void(^updatedDownloadsCallback)(SKDownload* download);
 //@property (nonatomic, strong) void(^purchaseRestorationCallback)(NSError* err);
-@property (nonatomic, strong) void(^transactionCallback)(NSArray* result, NSError* err);
+@property (nonatomic, strong) void(^transactionCallback)(SKPaymentTransaction* transaction, NSError* err);
 
 - (BOOL) canMakePayments;
 
 - (BOOL) setup;
 - (void) load:(NSArray*)inArray withCallback:(void(^)(NSArray* result, NSError* err))callback;
-- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result, NSError* err))callback;
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(SKPaymentTransaction* transaction, NSError* err))callback;
 - (NSString*) appStoreReceipt;
 - (void) appStoreRefreshReceipt:(void(^)(NSArray* result, NSError* err))callback;
-- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSArray* result, NSError* err))callback;
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(SKPaymentTransaction* transaction, NSError* err))callback;
 
 - (void) pauseDownloads;
 - (void) resumeDownloads;
@@ -55,7 +55,7 @@
 #pragma mark - Utils
 
 - (void) processPendingTransactionUpdates;
-- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs;
+- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction;
 
 @end
 

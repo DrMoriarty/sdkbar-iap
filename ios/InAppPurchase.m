@@ -187,7 +187,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     DLog(@"load: Product request started");
 }
 
-- (void) purchase: (NSString*)identifier withCallback:(void(^)(NSArray* result, NSError* err))callback {
+- (void) purchase: (NSString*)identifier withCallback:(void(^)(SKPaymentTransaction* transaction, NSError* err))callback {
 
     DLog(@"purchase: About to do IAP");
     self.transactionCallback = callback;
@@ -209,7 +209,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
   }
 }
 
-- (void) restoreCompletedTransactionsWithCallback:(void(^)(NSArray* result, NSError* err))callback {
+- (void) restoreCompletedTransactionsWithCallback:(void(^)(SKPaymentTransaction* transaction, NSError* err))callback {
     //_purchaseRestorationCallback = callback;
     self.transactionCallback = callback;
     [[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
@@ -218,7 +218,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) pauseDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
-    DLog(@"pause: Pausing %d active downloads...",[dls count]);
+    DLog(@"pause: Pausing %d active downloads...", (int)[dls count]);
     
     [[SKPaymentQueue defaultQueue] pauseDownloads:dls];
 }
@@ -226,14 +226,14 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) resumeDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
-    DLog(@"resume: Resuming %d active downloads...",[dls count]);
+    DLog(@"resume: Resuming %d active downloads...", (int)[dls count]);
     [[SKPaymentQueue defaultQueue] resumeDownloads:[self.currentDownloads allValues]];
 }
 
 - (void) cancelDownloads {
 
     NSArray *dls = [self.currentDownloads allValues];
-    DLog(@"cancel: Cancelling %d active downloads...",[dls count]);
+    DLog(@"cancel: Cancelling %d active downloads...", (int)[dls count]);
     [[SKPaymentQueue defaultQueue] cancelDownloads:[self.currentDownloads allValues]];
 }
 
@@ -264,7 +264,9 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     DLog(@"getUnfinishedTransactions");
     NSMutableArray *result = [NSMutableArray new];
     for(SKPaymentTransaction *transaction in self.unfinishedTransactions) {
-        [result addObject:transaction.transactionIdentifier];
+        NSString *transactionIdentifier = transaction.transactionIdentifier;
+        if(transactionIdentifier == nil) transactionIdentifier = transaction.originalTransaction.transactionIdentifier;
+        [result addObject:transactionIdentifier];
     }
     return result;
 }
@@ -297,6 +299,8 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
     NSData *receiptData = [self appStoreReceiptData];
     if (receiptData != nil) {
         base64 = [receiptData convertToBase64];
+    } else {
+        base64 = @"";
     }
     return base64;
 }
@@ -395,26 +399,26 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         }
 
         DLog(@"paymentQueue:updatedTransactions: State: %@", state);
-#define PT_INDEX_STATE 0
-#define PT_INDEX_ERROR_CODE 1
-#define PT_INDEX_ERROR 2
-#define PT_INDEX_TRANSACTION_IDENTIFIER 3
-#define PT_INDEX_PRODUCT_IDENTIFIER 4
-#define PT_INDEX_TRANSACTION_RECEIPT 5
-        NSArray *callbackArgs = [NSArray arrayWithObjects:
-            NILABLE(state),
-            [NSNumber numberWithInteger:errorCode],
-            NILABLE(error),
-            NILABLE(transactionIdentifier),
-            NILABLE(productId),
-            NILABLE(transactionReceipt),
-            nil];
+//#define PT_INDEX_STATE 0
+//#define PT_INDEX_ERROR_CODE 1
+//#define PT_INDEX_ERROR 2
+//#define PT_INDEX_TRANSACTION_IDENTIFIER 3
+//#define PT_INDEX_PRODUCT_IDENTIFIER 4
+//#define PT_INDEX_TRANSACTION_RECEIPT 5
+//        NSArray *callbackArgs = [NSArray arrayWithObjects:
+//            NILABLE(state),
+//            [NSNumber numberWithInteger:errorCode],
+//            NILABLE(error),
+//            NILABLE(transactionIdentifier),
+//            NILABLE(productId),
+//            NILABLE(transactionReceipt),
+//            nil];
 
         if (g_initialized) {
-            [self processTransactionUpdate:transaction withArgs:callbackArgs];
+            [self processTransactionUpdate:transaction];
         }
         else {
-            [pendingTransactionUpdates addObject:@[transaction,callbackArgs]];
+            [pendingTransactionUpdates addObject:transaction];
         }
     }
 }
@@ -429,8 +433,7 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
 
     DLog(@"paymentQueueRestoreCompletedTransactionsFinished:");
-    //if(_purchaseRestorationCallback) _purchaseRestorationCallback(nil);
-    if(self.transactionCallback) self.transactionCallback(nil, nil);
+    //if(self.transactionCallback) self.transactionCallback(nil, nil);
 }
 
 /****************************************************************************************************************
@@ -537,18 +540,18 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         DLog(@"paymentQueue:updatedDownloads: Product %@ in download state: %@", productId, state);
         
         
-        callbackArgs = [NSArray arrayWithObjects:
-            NILABLE(state),
-            [NSNumber numberWithInt:errorCode],
-            NILABLE(error),
-            NILABLE(transactionId),
-            NILABLE(productId),
-            NILABLE(transactionReceipt),
-            NILABLE(progress_s),
-            NILABLE(timeRemaining_s),
-            nil];
+//        callbackArgs = [NSArray arrayWithObjects:
+//            NILABLE(state),
+//            [NSNumber numberWithInt:errorCode],
+//            NILABLE(error),
+//            NILABLE(transactionId),
+//            NILABLE(productId),
+//            NILABLE(transactionReceipt),
+//            NILABLE(progress_s),
+//            NILABLE(timeRemaining_s),
+//            nil];
 
-        if(_updatedDownloadsCallback) _updatedDownloadsCallback(callbackArgs);
+        if(_updatedDownloadsCallback) _updatedDownloadsCallback(download);
     }
 }
 
@@ -600,30 +603,34 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
 - (void) transactionFinished: (SKPaymentTransaction*) transaction {
     DLog(@"transactionFinished: %@", transaction.transactionIdentifier);
 
-    NSArray *callbackArgs = [NSArray arrayWithObjects:
-        NILABLE(@"PaymentTransactionStateFinished"),
-        [NSNumber numberWithInteger:transaction.error.code],
-        NILABLE(transaction.error),
-        NILABLE(transaction.transactionIdentifier),
-        NILABLE(transaction.payment.productIdentifier),
-        NILABLE(nil),
-        nil];
-    if(self.transactionCallback) self.transactionCallback(callbackArgs, transaction.error);
+//    NSArray *callbackArgs = [NSArray arrayWithObjects:
+//        NILABLE(@"PaymentTransactionStateFinished"),
+//        [NSNumber numberWithInteger:transaction.error.code],
+//        NILABLE(transaction.error),
+//        NILABLE(transaction.transactionIdentifier),
+//        NILABLE(transaction.payment.productIdentifier),
+//        NILABLE(nil),
+//        nil];
+    if(self.transactionCallback) self.transactionCallback(transaction, transaction.error);
 }
 
 - (void) processPendingTransactionUpdates {
 
     DLog(@"processPendingTransactionUpdates");
-    for (NSArray *ta in pendingTransactionUpdates) {
-        [self processTransactionUpdate:ta[0] withArgs:ta[1]];
+    for (SKPaymentTransaction *tr in pendingTransactionUpdates) {
+        [self processTransactionUpdate:tr];
     }
     [pendingTransactionUpdates removeAllObjects];
 }
 
-- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction withArgs:(NSArray*)callbackArgs {
+- (void) processTransactionUpdate:(SKPaymentTransaction*)transaction {
 
-    DLog(@"processTransactionUpdate:withArgs: transactionIdentifier=%@", callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]);
-    if(self.transactionCallback) self.transactionCallback(callbackArgs, nil);
+    DLog(@"processTransactionUpdate:withArgs: transactionIdentifier=%@", transaction.transactionIdentifier);
+    if(transaction.transactionState == SKPaymentTransactionStatePurchased ||
+       transaction.transactionState == SKPaymentTransactionStateFailed ||
+       transaction.transactionState == SKPaymentTransactionStateRestored) {
+        if(self.transactionCallback) self.transactionCallback(transaction, nil);
+    }
 
     NSArray *downloads = nil;
     SKPaymentTransactionState state = transaction.transactionState;
@@ -643,7 +650,10 @@ static NSString *jsErrorCodeAsString(NSInteger code) {
         [self transactionFinished:transaction];
     }
     else {
-        [self.unfinishedTransactions setObject:transaction forKey:callbackArgs[PT_INDEX_TRANSACTION_IDENTIFIER]];
+        NSString *transactionIdentifier = transaction.transactionIdentifier;
+        if(transactionIdentifier == nil) transactionIdentifier = transaction.originalTransaction.transactionIdentifier;
+        if(transactionIdentifier == nil) transactionIdentifier = @"";
+        [self.unfinishedTransactions setObject:transaction forKey:transactionIdentifier];
     }
 }
 

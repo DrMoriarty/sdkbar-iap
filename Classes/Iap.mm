@@ -269,7 +269,12 @@ static bool js_iap_buy(JSContext *cx, uint32_t argc, jsval *vp)
         // sku, payload, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(3), args.get(2));
         NSString *sku = jsval_to_string(cx, args.get(0));
-        [inAppPurchase purchase:sku withCallback:^(NSArray* result, NSError* err) {
+        [inAppPurchase purchase:sku withCallback:^(SKPaymentTransaction* transaction, NSError* err) {
+            NSDictionary *result = @{
+                                     @"productId": transaction.payment.productIdentifier,
+                                     @"receipt": inAppPurchase.appStoreReceipt,
+                                     @"signature": @""
+                                     };
             callback(cb->callbackId, result, err.localizedDescription);
         }];
         rec.rval().set(JSVAL_TRUE);
@@ -290,7 +295,12 @@ static bool js_iap_subscribe(JSContext *cx, uint32_t argc, jsval *vp)
         // sku, payload, oldPurchasedSkus, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(4), args.get(3));
         NSString *sku = jsval_to_string(cx, args.get(0));
-        [inAppPurchase purchase:sku withCallback:^(NSArray* result, NSError* err) {
+        [inAppPurchase purchase:sku withCallback:^(SKPaymentTransaction* transaction, NSError* err) {
+            NSDictionary *result = @{
+                                     @"productId": transaction.payment.productIdentifier,
+                                     @"receipt": inAppPurchase.appStoreReceipt,
+                                     @"signature": @""
+                                     };
             callback(cb->callbackId, result, err.localizedDescription);
         }];
         rec.rval().set(JSVAL_TRUE);
@@ -311,10 +321,14 @@ static bool js_iap_consume(JSContext *cx, uint32_t argc, jsval *vp)
         // sku, callback, this
         CallbackFrame *cb = new CallbackFrame(cx, obj, args.get(2), args.get(1));
         NSString *sku = jsval_to_string(cx, args.get(0));
-        inAppPurchase.transactionCallback = ^(NSArray* result, NSError* err)
-            {
-             callback(cb->callbackId, result, err.localizedDescription);
-            };
+        inAppPurchase.transactionCallback = ^(SKPaymentTransaction* transaction, NSError* err) {
+            NSDictionary *result = @{
+                                     @"productId": transaction.payment.productIdentifier,
+                                     @"receipt": inAppPurchase.appStoreReceipt,
+                                     @"signature": @""
+                                     };
+            callback(cb->callbackId, result, err.localizedDescription);
+        };
         [inAppPurchase finishTransaction:sku];
         rec.rval().set(JSVAL_TRUE);
         return true;
